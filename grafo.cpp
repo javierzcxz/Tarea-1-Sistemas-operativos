@@ -16,13 +16,10 @@ bool dependenciasValidas(map<string, Actividad>& grafo)
 
         for (int i = 0; i < cantidad; i++)
         {
-            string dependencia = it->second.dependencias[i];
-
-            if (grafo.count(dependencia) == 0)
+            if (grafo.count(it->second.dependencias[i]) == 0)
             {
                 cout << "Error: la actividad " << it->first
-                     << " depende de " << dependencia
-                     << " que no existe" << endl;
+                     << " depende de una actividad que no existe" << endl;
                 return false;
             }
         }
@@ -73,31 +70,9 @@ bool revisarGrafo(map<string, Actividad>& grafo)
 
     for (it = grafo.begin(); it != grafo.end(); it++)
     {
-        if (!visitado[it->first])
+        if (hayCiclo(it->first, grafo, visitado, revisando))
         {
-            if (hayCiclo(it->first, grafo, visitado, revisando))
-            {
-                cout << "Error: el plan tiene un ciclo" << endl;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-bool estaLista(Actividad& actividad, map<string, Estado>& estados)
-{
-    if (estados[actividad.id] != PENDIENTE)
-    {
-        return false;
-    }
-
-    int cantidad = actividad.dependencias.size();
-
-    for (int i = 0; i < cantidad; i++)
-    {
-        if (estados[actividad.dependencias[i]] != TERMINADA)
-        {
+            cout << "Error: el plan tiene un ciclo" << endl;
             return false;
         }
     }
@@ -113,23 +88,71 @@ int abortarDependientes(string idFallida,
 
     for (it = grafo.begin(); it != grafo.end(); it++)
     {
-        if (estados[it->first] != PENDIENTE)
-        {
-            continue;
-        }
-
         int cantidad = it->second.dependencias.size();
 
         for (int i = 0; i < cantidad; i++)
         {
-            if (it->second.dependencias[i] == idFallida)
+            if (it->second.dependencias[i] == idFallida && estados[it->first] == PENDIENTE)
             {
                 estados[it->first] = ABORTADA;
                 abortadas++;
                 abortadas = abortadas + abortarDependientes(it->first, grafo, estados);
-                break;
             }
         }
     }
     return abortadas;
+}
+
+void iniciarEstados(map<string, Actividad>& grafo,
+                    map<string, Estado>& estados)
+{
+    map<string, Actividad>::iterator it;
+
+    for (it = grafo.begin(); it != grafo.end(); it++)
+    {
+        estados[it->first] = PENDIENTE;
+    }
+}
+
+void prepararEspera(map<string, Actividad>& grafo,
+                    map<string, int>& faltan,
+                    map<string, vector<string> >& dependientes,
+                    vector<string>& listas)
+{
+    map<string, Actividad>::iterator it;
+
+    for (it = grafo.begin(); it != grafo.end(); it++)
+    {
+        int cantidad = it->second.dependencias.size();
+        faltan[it->first] = cantidad;
+
+        if (cantidad == 0)
+        {
+            listas.push_back(it->first);
+        }
+
+        for (int i = 0; i < cantidad; i++)
+        {
+            dependientes[it->second.dependencias[i]].push_back(it->first);
+        }
+    }
+}
+
+void avisarTerminada(string id,
+                     map<string, int>& faltan,
+                     map<string, vector<string> >& dependientes,
+                     vector<string>& listas)
+{
+    int cantidad = dependientes[id].size();
+
+    for (int i = 0; i < cantidad; i++)
+    {
+        string dependiente = dependientes[id][i];
+        faltan[dependiente]--;
+
+        if (faltan[dependiente] == 0)
+        {
+            listas.push_back(dependiente);
+        }
+    }
 }
