@@ -2,7 +2,6 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <map>
 #include <cstdlib>
 #include "actividad.h"
@@ -15,11 +14,11 @@ string limpiar(string texto)
     int inicio = 0;
     int final = texto.length() - 1;
 
-    while (inicio <= final && (texto[inicio] == ' ' || texto[inicio] == '\t' || texto[inicio] == '\r'))
+    while (inicio <= final && (texto[inicio] == ' ' || texto[inicio] == '\r'))
     {
         inicio++;
     }
-    while (final >= inicio && (texto[final] == ' ' || texto[final] == '\t' || texto[final] == '\r'))
+    while (final >= inicio && (texto[final] == ' ' || texto[final] == '\r'))
     {
         final--;
     }
