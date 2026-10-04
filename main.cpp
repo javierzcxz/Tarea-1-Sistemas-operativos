@@ -2,15 +2,20 @@
 #include <unistd.h> //usleep()
 #include <sys/wait.h>
 #include <map>
+#include <ctime>
+#include <string>
+#include <cstdlib>
+#include "grafo.h"
+#include "leerplan.h"
 using namespace std;
 
-void crearAct (int idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, int> &procesos_activos )
+void crearAct (string idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, string> &procesos_activos )
 {
    pid_t pid = fork();
    if( pid == 0)
        {
          //hijo
-         //simulamos que tenemos la act 
+         //simulamos que tenemos la act
          usleep(tiempo_ms * 1000);
          exit (0);
 
@@ -25,40 +30,50 @@ void crearAct (int idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, int
 
 }
 
-void esperaract (int &ejecutandose , map<pid_t, int> &procesos_activos)
+void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
+                 map<string, Actividad> &grafo, map<string, Estado> &estados,
+                 map<string, int> &faltan, map<string, vector<string> > &dependientes,
+                 vector<string> &listas)
 {
    int status;
    pid_t terminado = waitpid(-1, &status, 0);
-         ejecutandose --;
-         if (WIFEXITED(status)) // si terminó normalmente)
-         {
+   ejecutandose --;
 
-      
-            if ( WEXITSTATUS(status) == 0)
-            {
-              int act_terminada = procesos_activos[terminado];
-              cout << "Actividad " << act_terminada << " terminó correctamente" << endl;
-              procesos_activos.erase(terminado);
-            }
-            else {cout << "Actividad falló " << endl;}
-            procesos_activos.erase();
+   string id = procesos_activos[terminado];
+   procesos_activos.erase(terminado);
 
-         }
+   if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+   {
+      estados[id] = TERMINADA;
+      avisarTerminada(id, faltan, dependientes, listas);
+      cout << "Actividad " << id << " terminó correctamente" << endl;
+   }
+   else
+   {
+      estados[id] = ABORTADA;
+      abortarDependientes(id, grafo, estados);
+      cout << "Actividad " << id << " falló" << endl;
+   }
 }
 
 int main( int argc, char* argv[]){
     int k;
     int ejecutandose = 0;
-    map <pid_t, int > procesos_activos;
-    //datos javi
-     int idActividad;
-     int tiempo_ms;
+    map<pid_t, string> procesos_activos;
+    map<string, Actividad> grafo;
+    map<string, Estado> estados;
+    map<string, int> faltan;
+    map<string, vector<string> > dependientes;
+    vector<string> listas;
 
-
-
-      if( argc == 3 )
+    if( argc == 3 )
     {
-       k =  stoi(argv[2]);
+       k = stoi(argv[2]);
+       if (k <= 0)
+       {
+         cout << "K debe ser mayor que 0" << endl;
+         exit(1);
+       }
     }
     else
     {
@@ -66,37 +81,30 @@ int main( int argc, char* argv[]){
        exit(1);
     }
 
-   
- while (//javi coloca la condición de las actividades listas con sus dependencias etc)
- {
+    srand(time(NULL));
 
-
-   // ver si se pueden ejecutar más cosas
-    if (ejecutandose < k)
+    if (!leerPlan(argv[1], grafo) || !revisarGrafo(grafo))
     {
-       crearAct(idActividad, tiempo_ms,ejecutandose,procesos_activos);
+       return 1;
+    }
 
-       }
-       else // si no es mayor qu ek esperamos a que termine uno de los hijos 
-       {
-        esperaract(ejecutandose, procesos_activos);
-       }
- }
+    iniciarEstados(grafo, estados);
+    prepararEspera(grafo, faltan, dependientes, listas);
 
- while (ejecutandose > 0)
- {
-   esperaract(ejecutandose,procesos_activos);
- }
- 
+    while (listas.size() > 0 || ejecutandose > 0)
+    {
+        if (listas.size() > 0 && ejecutandose < k)
+        {
+            string id = listas.back();
+            listas.pop_back();
+            estados[id] = EJECUTANDO;
+            crearAct(id, grafo[id].tiempo_ms, ejecutandose, procesos_activos);
+        }
+        else
+        {
+            esperaract(ejecutandose, procesos_activos, grafo, estados, faltan, dependientes, listas);
+        }
+    }
 
-
-
-
-
-   
-
-  
-
- 
-
+    return 0;
 }
