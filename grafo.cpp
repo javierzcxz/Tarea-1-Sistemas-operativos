@@ -12,13 +12,15 @@ bool dependenciasValidas(map<string, Actividad>& grafo)
 
     for (it = grafo.begin(); it != grafo.end(); it++)
     {
-        for (int i = 0; i < it->second.dependencias.size(); i++)
+        int cantidad = it->second.dependencias.size();
+
+        for (int i = 0; i < cantidad; i++)
         {
             string dependencia = it->second.dependencias[i];
 
             if (grafo.count(dependencia) == 0)
             {
-                cout << "Error en la actividad " << it->first
+                cout << "Error: la actividad " << it->first
                      << " depende de " << dependencia
                      << " que no existe" << endl;
                 return false;
@@ -44,7 +46,9 @@ bool hayCiclo(string id, map<string, Actividad>& grafo,
     visitado[id] = true;
     revisando[id] = true;
 
-    for (int i = 0; i < grafo[id].dependencias.size(); i++)
+    int cantidad = grafo[id].dependencias.size();
+
+    for (int i = 0; i < cantidad; i++)
     {
         if (hayCiclo(grafo[id].dependencias[i], grafo, visitado, revisando))
         {
@@ -88,7 +92,9 @@ bool estaLista(Actividad& actividad, map<string, Estado>& estados)
         return false;
     }
 
-    for (int i = 0; i < actividad.dependencias.size(); i++)
+    int cantidad = actividad.dependencias.size();
+
+    for (int i = 0; i < cantidad; i++)
     {
         if (estados[actividad.dependencias[i]] != TERMINADA)
         {
@@ -102,7 +108,7 @@ int abortarDependientes(string idFallida,
                         map<string, Actividad>& grafo,
                         map<string, Estado>& estados)
 {
-    int cantidad = 0;
+    int abortadas = 0;
     map<string, Actividad>::iterator it;
 
     for (it = grafo.begin(); it != grafo.end(); it++)
@@ -112,16 +118,18 @@ int abortarDependientes(string idFallida,
             continue;
         }
 
-        for (int i = 0; i < it->second.dependencias.size(); i++)
+        int cantidad = it->second.dependencias.size();
+
+        for (int i = 0; i < cantidad; i++)
         {
             if (it->second.dependencias[i] == idFallida)
             {
                 estados[it->first] = ABORTADA;
-                cantidad++;
-                cantidad = cantidad + abortarDependientes(it->first, grafo, estados);
+                abortadas++;
+                abortadas = abortadas + abortarDependientes(it->first, grafo, estados);
                 break;
             }
         }
     }
-    return cantidad;
+    return abortadas;
 }
