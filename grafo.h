@@ -1,7 +1,9 @@
 #ifndef GRAFO_H
 #define GRAFO_H
 
+#include <string>
 #include <map>
+#include <vector>
 #include "actividad.h"
 
 using namespace std;
@@ -21,10 +23,22 @@ bool hayCiclo(string id, map<string, Actividad>& grafo,
 
 bool revisarGrafo(map<string, Actividad>& grafo);
 
-bool estaLista(Actividad& actividad, map<string, Estado>& estados);
 
 int abortarDependientes(string idFallida,
                         map<string, Actividad>& grafo,
                         map<string, Estado>& estados);
+
+void iniciarEstados(map<string, Actividad>& grafo,
+                    map<string, Estado>& estados);
+
+void prepararEspera(map<string, Actividad>& grafo,
+                    map<string, int>& faltan,
+                    map<string, vector<string> >& dependientes,
+                    vector<string>& listas);
+
+void avisarTerminada(string id,
+                     map<string, int>& faltan,
+                     map<string, vector<string> >& dependientes,
+                     vector<string>& listas);
 
 #endif
