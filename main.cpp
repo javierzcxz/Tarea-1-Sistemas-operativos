@@ -46,9 +46,9 @@ pid_t pid  = fork();
          signal(SIGINT, SIG_DFL);// para que ignore la señal 
          //hijo
         usleep(tiempo_ms * 1000);
-
-        for(int i = 0; i < dependientes[idActividad].size(); i++) // recoore patra sabr que act depende de otr act
-      {
+        int cantidad = dependientes[idActividad].size();
+        for(int i = 0; i < cantidad; i++) // recoore patra sabr que act depende de otr act
+         {
        // toma el id de la act dependiendte 
          string nombrepipe = "actividad_" + dependientes[idActividad][i];
 
@@ -58,7 +58,7 @@ pid_t pid  = fork();
 
          close(fd);
          
-      }
+         }
 
          exit(0);
 
@@ -106,7 +106,8 @@ void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
          estados[id] = TERMINADA;
          procesos_activos.erase(terminado);
 
-          for(int i = 0; i < dependientes[id].size(); i++)
+          int cantidadDep = dependientes[id].size();
+          for(int i = 0; i < cantidadDep; i++)
 
          {
             string iddependiente = dependientes[id][i];
@@ -131,8 +132,7 @@ void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
    }
 }
 
-
-void controlc(int signal)
+void controlc(int)
 {
     ctrlc = true;
 }
