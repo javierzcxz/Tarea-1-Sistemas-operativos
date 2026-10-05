@@ -1,30 +1,14 @@
-<div align="center">
-
 # Tarea 1 — Planificador Dieciochero
 
-Simulador que ejecuta actividades usando procesos, pipes y señales.
-
 ---
 
-**Universidad Diego Portales** · Escuela de Informática y Telecomunicaciones
+## 1. Descripción del proyecto
 
-![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
-![Plataforma](https://img.shields.io/badge/Plataforma-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
+El señor Loyola quiere celebrar las Fiestas Patrias durante toda la semana y tener todo bien organizado. Para eso se desarrolló un programa que lee un archivo con las actividades del día (por ejemplo "prender el carbón", "comprar la carne" o "asar la longaniza") y las va ejecutando en el orden correcto.
 
-</div>
+Cada actividad tiene un ID, un nombre, un tiempo en milisegundos y una lista de dependencias. Una dependencia es una actividad que debe terminar antes de que otra pueda comenzar. Por ejemplo, no se puede asar la longaniza si todavía no está prendido el carbón.
 
----
-
-## 1. De qué trata el proyecto
-
-El señor Loyola quiere celebrar las Fiestas Patrias toda la semana y lo quiere tener todo bien organizado. Para eso hicimos un programa que lee un archivo con las actividades del día (por ejemplo "prender el carbón", "comprar la carne", "asar la longaniza") y las va ejecutando en el orden correcto.
-
-Cada actividad tiene un ID, un nombre, un tiempo en milisegundos y una lista de dependencias. Una dependencia es una actividad que tiene que terminar antes de que la otra pueda empezar. Por ejemplo, no se puede asar la longaniza si todavía no está prendido el carbón.
-
-El programa recibe el archivo con el plan y un número `K`, que es la cantidad máxima de actividades que pueden estar corriendo al mismo tiempo.
-
-> [!IMPORTANT]
-> No usamos hilos (threads). Todo se hace con procesos, pipes y señales.
+El programa recibe el archivo con el plan y un número `K`, que corresponde a la cantidad máxima de actividades que pueden estar corriendo al mismo tiempo. Cada actividad se ejecuta en un proceso distinto, creado con `fork()`.
 
 ---
 
@@ -38,43 +22,42 @@ Tarea-1-Sistemas-operativos/
 ├── leerplan.h
 ├── leerplan.cpp
 ├── main.cpp
+├── Makefile
 ├── plan.txt
 └── README.md
 ```
 
 | Archivo | Para qué sirve |
 |:---|:---|
-| `actividad.h` | Define cómo guardamos una actividad. |
+| `actividad.h` | Define cómo se guarda una actividad. |
 | `leerplan.cpp` / `leerplan.h` | Lee el archivo del plan y lo guarda en memoria. |
-| `grafo.cpp` / `grafo.h` | Revisa que el plan sea válido y decide qué actividades ya se pueden ejecutar. |
-| `main.cpp` | Crea los procesos, controla el límite K y espera a que terminen. |
+| `grafo.cpp` / `grafo.h` | Valida el plan y decide qué actividades ya se pueden ejecutar. |
+| `main.cpp` | Crea los procesos, controla el límite K, usa los pipes y maneja el Ctrl+C. |
+| `Makefile` | Compila todo con un solo comando. |
 | `plan.txt` | Plan de ejemplo para probar. |
 
 ---
 
-## 3. Cómo compilar
+## 3. Compilación y ejecución
 
 Desde la carpeta del proyecto:
 
 ```bash
-g++ -Wall -Wextra -std=c++17 main.cpp leerplan.cpp grafo.cpp -o planificador -lpthread
+make
 ```
 
-> [!NOTE]
-> Ponemos `-lpthread` porque la pauta lo pide para compilar, pero no usamos hilos en ninguna parte del código.
+Esto compila todos los archivos con las opciones `-std=c++17 -Wall -Wextra -lpthread` y genera el ejecutable `planificador`. Al terminar, el mismo `make` borra los archivos objeto (`.o`), por lo que solo queda el ejecutable.
 
----
-
-## 4. Cómo ejecutar
+Para ejecutar:
 
 ```bash
 ./planificador <archivo.txt> <K>
 ```
 
-| Parámetro | Qué es |
+| Parámetro | Descripción |
 |:---|:---|
-| `<archivo.txt>` | El archivo con las actividades. |
-| `<K>` | Máximo de procesos al mismo tiempo. Tiene que ser mayor que 0. |
+| `<archivo.txt>` | Archivo con las actividades. |
+| `<K>` | Máximo de procesos al mismo tiempo. Debe ser mayor que 0. |
 
 Ejemplo:
 
@@ -82,15 +65,15 @@ Ejemplo:
 ./planificador plan.txt 3
 ```
 
-Esto ejecuta el plan de `plan.txt` con máximo 3 actividades al mismo tiempo.
+Esto ejecuta el plan de `plan.txt` con un máximo de 3 actividades al mismo tiempo.
 
 Si el plan tiene un ciclo o una dependencia que no existe, el programa avisa del error y no ejecuta nada.
 
 ---
 
-## 5. Formato del archivo
+## 4. Formato del archivo
 
-Cada línea es una actividad:
+Cada línea del archivo es una actividad:
 
 ```text
 ID : nombre : tiempo_ms : dependencia1, dependencia2
@@ -107,89 +90,81 @@ Ejemplo:
 6 : servir_mesa : 100 : 5
 ```
 
-- Si una actividad no depende de nadie, el último campo se deja vacío.
-- Si no se pone el tiempo, el programa elige uno al azar entre 100 y 5000 ms.
+- Si una actividad no depende de ninguna otra, el último campo se deja vacío.
+- Si no se indica el tiempo, el programa asigna uno al azar entre 100 y 5000 ms.
 - Las líneas vacías se ignoran.
 
 ---
 
-## 6. Qué hace cada función
+## 5. Funciones implementadas
 
 ### actividad.h
-- `Actividad`: es un struct con el id, el nombre, el tiempo en ms y un vector con las dependencias.
+- `Actividad`: struct que guarda el id, el nombre, el tiempo en ms y un vector con las dependencias.
 
 ### leerplan.cpp
-- `limpiar`: le saca los espacios del principio y del final a un texto. Lo necesitamos porque en el archivo las líneas vienen con espacios y el ID `"1 "` no es igual a `"1"`.
-- `leerPlan`: lee el archivo línea por línea, separa los 4 campos usando `:` y guarda cada actividad en un `map` usando su ID como clave. Si falta el tiempo, pone uno al azar.
+- `limpiar`: elimina los espacios del inicio y del final de un texto. Es necesaria porque las líneas del archivo traen espacios, y el ID `"1 "` no es igual a `"1"`.
+- `leerPlan`: lee el archivo línea por línea, separa los 4 campos usando `:` y guarda cada actividad en un `map` con su ID como clave. Si falta el tiempo, asigna uno al azar.
 
 ### grafo.cpp
 - `dependenciasValidas`: revisa que todas las dependencias existan en el plan.
-- `hayCiclo`: revisa si el plan tiene un ciclo (por ejemplo, la 1 depende de la 2 y la 2 depende de la 1). Si hubiera uno, nada podría empezar nunca.
-- `revisarGrafo`: junta las dos revisiones de arriba. Se llama una vez al principio.
+- `hayCiclo`: detecta si el plan tiene un ciclo (por ejemplo, la 1 depende de la 2 y la 2 depende de la 1). Con un ciclo ninguna de las dos podría empezar nunca.
+- `revisarGrafo`: junta las dos revisiones anteriores y se llama una vez al inicio.
 - `iniciarEstados`: deja todas las actividades en `PENDIENTE`.
-- `prepararEspera`: cuenta cuántas dependencias le faltan a cada actividad, anota quién depende de quién y deja en una lista (`listas`) las actividades que no dependen de nadie, que son las primeras que se pueden ejecutar.
-- `avisarTerminada`: cuando una actividad termina, le resta 1 al contador de las que dependían de ella. Si a alguna le llega a 0, ya está lista y pasa a `listas`.
-- `abortarDependientes`: si una actividad falla, marca como `ABORTADA` a todas las que dependían de ella, directa o indirectamente. Las demás siguen normal.
+- `prepararEspera`: calcula cuántas dependencias le faltan a cada actividad, registra quién depende de quién y deja en la lista `listas` las actividades que no dependen de nadie, que son las primeras que se pueden ejecutar.
+- `avisarTerminada`: cuando una actividad termina, le resta 1 al contador de las que dependían de ella. Si a alguna le llega a 0, pasa a `listas`.
+- `abortarDependientes`: si una actividad falla, marca como `ABORTADA` a todas las que dependían de ella, directa o indirectamente. El resto sigue normal.
 
 ### main.cpp
-- `crearAct`: crea un proceso hijo con `fork()`. El hijo simula la actividad con `usleep` durante su tiempo. El padre guarda el PID para saber qué actividad es cuál.
-- `esperaract`: espera con `waitpid` a que termine un hijo, revisa cómo terminó y actualiza el estado. Si terminó bien avisa a sus dependientes, y si falló aborta su rama.
-- `main`: revisa los argumentos, lee y valida el plan, y después repite lo siguiente: si hay una actividad lista y hay menos de K procesos corriendo, lanza una; si no, espera a que termine algún hijo.
-
-### Parte de Martina
-
-> rellenar compañera MARTINA: funciones de pipes, SIGINT (Ctrl+C) y cómo falla una actividad de verdad (si se agregó algo en el hijo, explicarlo acá).
+- `crearAct`: crea un pipe y después un proceso hijo con `fork()`. El hijo cierra el extremo de lectura, simula la actividad con `usleep` durante su tiempo, escribe su ID en el pipe y termina. El padre cierra el extremo de escritura y guarda el PID del hijo y el extremo de lectura de su pipe.
+- `esperaract`: espera con `waitpid` a que termine un hijo y revisa cómo terminó. Si terminó bien, lee el mensaje del pipe, cierra el pipe, marca la actividad como `TERMINADA` y avisa a sus dependientes. Si terminó con error, cierra el pipe, la marca como `ABORTADA` y aborta su rama.
+- `controlc`: manejador de la señal `SIGINT`. Solo activa una variable (`ctrlc`) para avisar que se apretó Ctrl+C.
+- `main`: revisa los argumentos, lee y valida el plan, y luego repite lo siguiente: si hay una actividad lista y hay menos de K procesos corriendo, lanza una; si no, espera a que termine algún hijo. Al inicio de cada vuelta revisa si se apretó Ctrl+C.
 
 ---
 
-## 7. Decisiones que tomamos
+## 6. Decisiones de diseño
 
-### Usar map y vector
-Guardamos el plan en un `map<string, Actividad>` con el ID como clave. Es fácil de usar y así encontramos cualquier actividad por su ID rápido. Para las listas usamos `vector`.
+### Uso de map y vector
+El plan se guarda en un `map<string, Actividad>` con el ID como clave, lo que permite encontrar cualquier actividad rápidamente a partir de su ID. Para las listas se usa `vector`.
 
 ### Contador de dependencias en vez de buscar cada vez
-Al principio, para saber qué actividad se podía ejecutar, recorríamos todo el plan cada vez. Con pocas actividades andaba bien, pero con 10000 actividades independientes se demoró más de 98 segundos y la tuvimos que cancelar. Lo cambiamos: ahora cada actividad tiene un contador de dependencias que le faltan, y cuando llega a 0 pasa a una lista de "listas". Así ya no hay que recorrer todo el plan. Con el mismo caso de 10000 actividades bajó a unos 1,5 segundos.
+En una primera versión, para saber qué actividad se podía ejecutar se recorría todo el plan en cada vuelta. Con pocas actividades funcionaba bien, pero con 10000 actividades independientes tardó más de 98 segundos y hubo que cancelarla. Para solucionarlo, cada actividad lleva un contador con las dependencias que le faltan, y cuando llega a 0 pasa a una lista de actividades listas. Así ya no es necesario recorrer todo el plan. Con el mismo caso de 10000 actividades, el tiempo bajó a unos 1,5 segundos.
 
 ### Límite K
-El padre cuenta cuántos hijos están corriendo. Si ya hay K, no crea más y espera a que termine uno.
+El padre lleva la cuenta de los hijos que están corriendo. Si ya hay K, no crea más y espera a que termine alguno.
 
 ### Sin espera activa
-Cuando no se puede lanzar nada, el padre se queda bloqueado en `waitpid`, así que no gasta CPU dando vueltas.
+Cuando no se puede lanzar ninguna actividad, el padre queda bloqueado en `waitpid`, por lo que no gasta CPU dando vueltas.
 
-### Revisar el plan antes de ejecutar
-Antes de crear cualquier proceso se revisa que no haya ciclos ni dependencias que no existan. Así evitamos que el programa se quede esperando para siempre.
+### Validación antes de ejecutar
+Antes de crear cualquier proceso se revisa que no haya ciclos ni dependencias inexistentes. Así se evita que el programa quede esperando para siempre.
 
-### Si una actividad falla
-Solo se abortan las actividades que dependían de ella. Todo lo que no tiene relación sigue funcionando.
+### Pipes
+Cada actividad tiene su propio pipe. El hijo escribe en él su ID al terminar y el padre lo lee cuando `waitpid` le avisa que el hijo terminó. De esta forma el padre nunca queda bloqueado leyendo, porque el mensaje ya está escrito. Cada extremo del pipe se cierra en el proceso que no lo usa, para no dejar descriptores abiertos. Esto es importante con muchas actividades, ya que el sistema limita la cantidad de descriptores por proceso.
 
-### Ctrl+C y pipes
-> rellenar compañera MARTINA: explicar cómo manejó SIGINT y los pipes, y por qué lo hizo así.
+### Falla de una actividad
+El padre revisa el código de salida de cada hijo. Si una actividad termina con un código distinto de 0, solo se abortan las que dependían de ella. Todo lo que no tiene relación con esa rama sigue funcionando.
 
----
-
-## 8. Pruebas que hicimos
-
-- El plan de ejemplo (`plan.txt`) con K=3: las actividades terminan respetando las dependencias y la última (`comenzar_fiesta`) sale al final.
-- Plan con ciclo: detecta el error y no ejecuta nada.
-- Plan con una dependencia que no existe: avisa cuál actividad tiene el problema.
-- Plan con tiempos vacíos: asigna tiempos al azar y las dependencias se respetan igual.
-- Falla de una actividad (la probamos con una línea temporal que hacía fallar la actividad 4): se abortaron solo sus dependientes (5, 7 y 8) y las otras terminaron bien.
-- 10000 actividades en cadena (cada una depende de la anterior) con K=3: unos 10 segundos, que es lo mínimo posible porque cada una dura 1 ms y van una tras otra.
-- 10000 actividades sin dependencias con K=50: unos 1,5 segundos.
-
-> rellenar compañera MARTINA: pruebas de pipes y Ctrl+C.
+### Ctrl+C (SIGINT)
+El manejador de la señal solo cambia una variable, ya que dentro de un manejador conviene hacer lo mínimo posible. El ciclo principal revisa esa variable en cada vuelta. Si está activa, el padre envía `SIGTERM` a todos los hijos que siguen corriendo, los espera con `waitpid` para que no queden procesos zombis, cierra los pipes pendientes y termina el programa.
 
 ---
 
-## 9. Integrantes
+## 7. Pruebas realizadas
 
-- **[TU NOMBRE]**: lectura del plan, grafo y dependencias.
-- **Martina [APELLIDO]**: procesos, pipes y señales.
+- Plan de ejemplo (`plan.txt`) con K=3: las actividades terminan respetando las dependencias y `comenzar_fiesta` termina al final.
+- Plan con ciclo: se detecta el error y no se ejecuta nada.
+- Plan con una dependencia inexistente: se avisa qué actividad tiene el problema.
+- Plan con tiempos vacíos: se asignan tiempos al azar y las dependencias se respetan igual.
+- Argumentos incorrectos (sin argumentos, K=0 o archivo inexistente): el programa avisa y termina con error.
+- Falla de una actividad (se probó con una línea temporal que hacía fallar la actividad 4): se abortaron solo sus dependientes (5, 7 y 8) y las demás terminaron bien.
+- Ctrl+C durante la ejecución: el programa se detiene, no quedan procesos hijos ni zombis y no se lanza ninguna actividad más.
+- 10000 actividades en cadena (cada una depende de la anterior) con K=3: unos 12 segundos, cerca del mínimo posible porque cada una dura 1 ms y se ejecutan una tras otra.
+- 10000 actividades sin dependencias con K=50: unos 1,5 segundos, con las 10000 terminadas correctamente.
 
 ---
 
-<div align="center">
+## 8. Integrantes
 
-Hecho para la asignatura de **Sistemas Operativos** · 2026
-
-</div>
+- Javier Zavaleta
+- Martina Veloso
