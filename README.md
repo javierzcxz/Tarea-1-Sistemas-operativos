@@ -8,7 +8,7 @@ El señor Loyola quiere celebrar las Fiestas Patrias durante toda la semana y te
 
 Cada actividad tiene un ID, un nombre, un tiempo en milisegundos y una lista de dependencias. Una dependencia es una actividad que debe terminar antes de que otra pueda comenzar. Por ejemplo, no se puede asar la longaniza si todavía no está prendido el carbón.
 
-El programa recibe el archivo con el plan y un número `K`, que corresponde a la cantidad máxima de actividades que pueden estar corriendo al mismo tiempo. Cada actividad se ejecuta en un proceso distinto, creado con `fork()`.
+El programa recibe el archivo con el plan y un número `K`, que corresponde a la cantidad máxima de actividades que pueden estar corriendo al mismo tiempo. Cada actividad se ejecuta en un proceso distinto, creado con `fork()`. No se usan hilos.
 
 ---
 
@@ -115,10 +115,12 @@ Ejemplo:
 - `abortarDependientes`: si una actividad falla, marca como `ABORTADA` a todas las que dependían de ella, directa o indirectamente. El resto sigue normal.
 
 ### main.cpp
-- `crearAct`: crea un pipe y después un proceso hijo con `fork()`. El hijo cierra el extremo de lectura, simula la actividad con `usleep` durante su tiempo, escribe su ID en el pipe y termina. El padre cierra el extremo de escritura y guarda el PID del hijo y el extremo de lectura de su pipe.
-- `esperaract`: espera con `waitpid` a que termine un hijo y revisa cómo terminó. Si terminó bien, lee el mensaje del pipe, cierra el pipe, marca la actividad como `TERMINADA` y avisa a sus dependientes. Si terminó con error, cierra el pipe, la marca como `ABORTADA` y aborta su rama.
+- `crearpipes`: crea un pipe con nombre (`mkfifo`) por cada actividad, llamado `actividad_<ID>`. Si había uno antiguo, lo borra antes.
+- `abrirpipes`: abre el extremo de lectura de cada pipe en el proceso padre.
+- `crearAct`: crea un proceso hijo con `fork()`. El hijo simula la actividad con `usleep` durante su tiempo y, al terminar, escribe su ID en el pipe de cada actividad que depende de ella. El padre guarda el PID para saber qué actividad corresponde a cada proceso.
+- `esperaract`: espera con `waitpid` a que termine un hijo y revisa cómo terminó. Si terminó bien, la marca como `TERMINADA`, lee los mensajes de los pipes de sus dependientes y avisa que ya terminó. Si terminó con error, la marca como `ABORTADA` y aborta su rama.
 - `controlc`: manejador de la señal `SIGINT`. Solo activa una variable (`ctrlc`) para avisar que se apretó Ctrl+C.
-- `main`: revisa los argumentos, lee y valida el plan, y luego repite lo siguiente: si hay una actividad lista y hay menos de K procesos corriendo, lanza una; si no, espera a que termine algún hijo. Al inicio de cada vuelta revisa si se apretó Ctrl+C.
+- `main`: revisa los argumentos, lee y valida el plan, crea los pipes y luego repite lo siguiente: si hay una actividad lista y hay menos de K procesos corriendo, lanza una; si no, espera a que termine algún hijo. Al inicio de cada vuelta revisa si se apretó Ctrl+C. Al final cierra y borra los pipes.
 
 ---
 
@@ -128,7 +130,7 @@ Ejemplo:
 El plan se guarda en un `map<string, Actividad>` con el ID como clave, lo que permite encontrar cualquier actividad rápidamente a partir de su ID. Para las listas se usa `vector`.
 
 ### Contador de dependencias en vez de buscar cada vez
-En una primera versión, para saber qué actividad se podía ejecutar se recorría todo el plan en cada vuelta. Con pocas actividades funcionaba bien, pero con 10000 actividades independientes tardó más de 98 segundos y hubo que cancelarla. Para solucionarlo, cada actividad lleva un contador con las dependencias que le faltan, y cuando llega a 0 pasa a una lista de actividades listas. Así ya no es necesario recorrer todo el plan. Con el mismo caso de 10000 actividades, el tiempo bajó a unos 1,5 segundos.
+En una primera versión, para saber qué actividad se podía ejecutar se recorría todo el plan en cada vuelta. Con pocas actividades funcionaba bien, pero con 10000 actividades independientes tardó más de 98 segundos y hubo que cancelarla. Para solucionarlo, cada actividad lleva un contador con las dependencias que le faltan, y cuando llega a 0 pasa a una lista de actividades listas. Así ya no es necesario recorrer todo el plan. Con el mismo caso de 10000 actividades, el tiempo bajó a unos 3 segundos.
 
 ### Límite K
 El padre lleva la cuenta de los hijos que están corriendo. Si ya hay K, no crea más y espera a que termine alguno.
@@ -139,14 +141,14 @@ Cuando no se puede lanzar ninguna actividad, el padre queda bloqueado en `waitpi
 ### Validación antes de ejecutar
 Antes de crear cualquier proceso se revisa que no haya ciclos ni dependencias inexistentes. Así se evita que el programa quede esperando para siempre.
 
-### Pipes
-Cada actividad tiene su propio pipe. El hijo escribe en él su ID al terminar y el padre lo lee cuando `waitpid` le avisa que el hijo terminó. De esta forma el padre nunca queda bloqueado leyendo, porque el mensaje ya está escrito. Cada extremo del pipe se cierra en el proceso que no lo usa, para no dejar descriptores abiertos. Esto es importante con muchas actividades, ya que el sistema limita la cantidad de descriptores por proceso.
+### Pipes con nombre
+Se usó un pipe con nombre por actividad porque así cualquier hijo puede escribirle a sus dependientes sin tener que heredar descriptores de otros procesos. El padre abre cada pipe para lectura sin bloquearse (`O_NONBLOCK`), de modo que los hijos pueden abrirlo para escribir sin quedarse esperando. Los mensajes son cortos (solo el ID de la actividad que terminó). Al finalizar, el padre cierra y borra todos los pipes, para no dejar archivos sobrantes en la carpeta.
 
 ### Falla de una actividad
-El padre revisa el código de salida de cada hijo. Si una actividad termina con un código distinto de 0, solo se abortan las que dependían de ella. Todo lo que no tiene relación con esa rama sigue funcionando.
+El padre revisa el código de salida de cada hijo. Si una actividad termina con un código distinto de 0, se marca como `ABORTADA` y solo se abortan las que dependían de ella. Todo lo que no tiene relación con esa rama sigue funcionando.
 
 ### Ctrl+C (SIGINT)
-El manejador de la señal solo cambia una variable, ya que dentro de un manejador conviene hacer lo mínimo posible. El ciclo principal revisa esa variable en cada vuelta. Si está activa, el padre envía `SIGTERM` a todos los hijos que siguen corriendo, los espera con `waitpid` para que no queden procesos zombis, cierra los pipes pendientes y termina el programa.
+El manejador de la señal solo cambia una variable, ya que dentro de un manejador conviene hacer lo mínimo posible. El ciclo principal revisa esa variable en cada vuelta. Si está activa, el padre envía `SIGTERM` a todos los hijos que siguen corriendo, los espera con `waitpid` para que no queden procesos zombis, cierra los pipes y termina el programa. Los hijos restauran el comportamiento normal de `SIGINT`, para que mueran y no sigan ejecutándose.
 
 ---
 
@@ -157,10 +159,11 @@ El manejador de la señal solo cambia una variable, ya que dentro de un manejado
 - Plan con una dependencia inexistente: se avisa qué actividad tiene el problema.
 - Plan con tiempos vacíos: se asignan tiempos al azar y las dependencias se respetan igual.
 - Argumentos incorrectos (sin argumentos, K=0 o archivo inexistente): el programa avisa y termina con error.
+- Límite K: con 4 actividades de 2 segundos y K=2, el programa tardó 4 segundos, es decir, nunca hubo más de 2 al mismo tiempo.
 - Falla de una actividad (se probó con una línea temporal que hacía fallar la actividad 4): se abortaron solo sus dependientes (5, 7 y 8) y las demás terminaron bien.
-- Ctrl+C durante la ejecución: el programa se detiene, no quedan procesos hijos ni zombis y no se lanza ninguna actividad más.
-- 10000 actividades en cadena (cada una depende de la anterior) con K=3: unos 12 segundos, cerca del mínimo posible porque cada una dura 1 ms y se ejecutan una tras otra.
-- 10000 actividades sin dependencias con K=50: unos 1,5 segundos, con las 10000 terminadas correctamente.
+- Ctrl+C durante la ejecución: el programa se detiene, no quedan procesos hijos, zombis ni archivos de pipes.
+- 10000 actividades en cadena (cada una depende de la anterior) con K=3: unos 14 segundos, cerca del mínimo posible porque cada una dura 1 ms y se ejecutan una tras otra.
+- 10000 actividades sin dependencias con K=50: unos 3 segundos, con las 10000 terminadas correctamente.
 
 ---
 
