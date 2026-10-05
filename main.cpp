@@ -8,41 +8,67 @@
 #include "grafo.h"
 #include "leerplan.h"
 #include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace std;
 
 bool ctrlc = false;
 
-void crearAct (string idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, string> &procesos_activos, map<pid_t, int> &pipes_activos)
+void crearpipes(map<string, Actividad> &grafo) //crea un pipe por cad aact
+{
+    for (auto iterador5 = grafo.begin(); iterador5 != grafo.end(); iterador5++)
+    {
+        string nombrepipe = "actividad_" + iterador5->first;
+
+        unlink(nombrepipe.c_str()); // si hay un pipe antiguo se borra 
+
+        mkfifo(nombrepipe.c_str(), 0666);
+    }
+}
+
+void abrirpipes(map<string, Actividad> &grafo, map<string, int> &pipes_lectura)
+{
+    for (auto iterador6 = grafo.begin(); iterador6 != grafo.end(); iterador6++)
+    {
+        string nombrepipe = "actividad_" + iterador6->first;
+
+        pipes_lectura[iterador6->first] = open(nombrepipe.c_str(), O_RDONLY | O_NONBLOCK);
+    }
+}
+
+void crearAct (string idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, string> &procesos_activos,  map<string, vector<string> > &dependientes)
 {
 
-//viene el pipe
- int fd[2]; // fd[0] para lectura, fd[1] para escritura
-    // Crear el pipe
-    if (pipe(fd) == -1)
-    {
-        perror("pipe");// imprime pq no funciona
-        _exit(1);
-    }
-
-   pid_t pid = fork();
+pid_t pid  = fork();
    if( pid == 0)
        {
+         signal(SIGINT, SIG_DFL);// para que ignore la señal 
          //hijo
-        close(fd[0]);
         usleep(tiempo_ms * 1000);
-        write(fd[1], idActividad.c_str(), idActividad.size());//lo q envio, cuanto envio el c_str de string a formato write
-        close(fd[1]);
-        _exit (0);
 
-       }
+        for(int i = 0; i < dependientes[idActividad].size(); i++) // recoore patra sabr que act depende de otr act
+      {
+       // toma el id de la act dependiendte 
+         string nombrepipe = "actividad_" + dependientes[idActividad][i];
+
+         int fd = open(nombrepipe.c_str(), O_WRONLY); // abre el pipe a usar , usando el nombre y usandolo solo para escribri 
+
+         write(fd, idActividad.c_str(), idActividad.size()); // donde , que , cuanto 
+
+         close(fd);
+         
+      }
+
+         exit(0);
+
+   }
        else if (pid > 0) //padre
        {
-        close(fd[1]);
-
+        
          ejecutandose ++;
          procesos_activos[pid] = idActividad;// así sabemos cual act tiene cual pid
-        pipes_activos[pid] = fd[0];
+        
 
         }
         else
@@ -56,7 +82,7 @@ void crearAct (string idActividad, int tiempo_ms, int &ejecutandose, map<pid_t, 
 void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
                  map<string, Actividad> &grafo, map<string, Estado> &estados,
                  map<string, int> &faltan, map<string, vector<string> > &dependientes,
-                 vector<string> &listas, map<pid_t, int> &pipes_activos)
+                 vector<string> &listas, map<string, int> &pipes_lectura)
 {
    int status;
    pid_t terminado = waitpid(-1, &status, 0); // PID
@@ -77,24 +103,27 @@ void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
       {
 
          cout << "Actividad " << id << " terminó correctamente" << endl;
+         estados[id] = TERMINADA;
          procesos_activos.erase(terminado);
-         int fd_terminado = pipes_activos[terminado];
 
-         char buffer[100];
-         int nbytes = read(fd_terminado, buffer, sizeof(buffer));
-         close(fd_terminado);
-         pipes_activos.erase(terminado);
-         estados[id]= TERMINADA;
+          for(int i = 0; i < dependientes[id].size(); i++)
+
+         {
+            string iddependiente = dependientes[id][i];
+
+            char buffer[100];
+
+            read(pipes_lectura[iddependiente], buffer, sizeof(buffer));
+         }
 
          avisarTerminada(id, faltan, dependientes, listas);
+
       }
       else
       {
          cout << "Actividad falló " << endl;
-         int fd_terminado = pipes_activos[terminado];
          procesos_activos.erase(terminado);
-         close(fd_terminado);
-         pipes_activos.erase(terminado);
+      
          estados[id] = ABORTADA;
          abortarDependientes(id,grafo,estados);
       }
@@ -113,8 +142,7 @@ int main( int argc, char* argv[]){
     int k;
     int ejecutandose = 0;
     map <pid_t, string > procesos_activos;
-    map<pid_t, int> pipes_activos; // para guardar cada pipe de cada hijo
-
+    map<string, int> pipes_lectura;
     //datos javi
     map<string, Actividad> grafo;
     map <string,  Estado> estados;
@@ -149,6 +177,8 @@ int main( int argc, char* argv[]){
 
     iniciarEstados(grafo, estados);
     prepararEspera(grafo, faltan, dependientes, listas);
+    crearpipes(grafo);
+    abrirpipes(grafo,pipes_lectura);
 
 
     signal(SIGINT, controlc);
@@ -165,7 +195,7 @@ int main( int argc, char* argv[]){
           waitpid(iterador3->first, NULL, 0); // para que no hayan zombies
         }
 
-        for( auto iterador4 = pipes_activos.begin(); iterador4 != pipes_activos.end(); iterador4++)
+        for( auto iterador4 = pipes_lectura.begin(); iterador4 != pipes_lectura.end(); iterador4++)
         {
           close(iterador4->second);
         }
@@ -181,14 +211,28 @@ int main( int argc, char* argv[]){
             listas.pop_back();
             estados[id] = EJECUTANDO;
 
-            crearAct(id, grafo[id].tiempo_ms, ejecutandose, procesos_activos,pipes_activos);
+            crearAct(id, grafo[id].tiempo_ms, ejecutandose, procesos_activos,dependientes);
         }
         else
         {
-            esperaract(ejecutandose,procesos_activos,grafo,estados,faltan,dependientes,listas,pipes_activos);
+            esperaract(ejecutandose,procesos_activos,grafo,estados,faltan,dependientes,listas,pipes_lectura);
         }
     }
 
 
+    for(auto iterador7 = grafo.begin(); iterador7 != grafo.end(); iterador7++)
+      {
+         string nombrepipe = "actividad_" + iterador7->first;
+
+         close(pipes_lectura[iterador7->first]);
+
+         unlink(nombrepipe.c_str());
+      }
+
+
     return 0;
+
+
+
+
 }
