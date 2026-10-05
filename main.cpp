@@ -17,7 +17,8 @@ bool ctrlc = false;
 
 void crearpipes(map<string, Actividad> &grafo) //crea un pipe por cad aact
 {
-    for (auto iterador5 = grafo.begin(); iterador5 != grafo.end(); iterador5++)
+    map<string, Actividad>::iterator iterador5;
+    for (iterador5 = grafo.begin(); iterador5 != grafo.end(); iterador5++)
     {
         string nombrepipe = "actividad_" + iterador5->first;
 
@@ -29,7 +30,8 @@ void crearpipes(map<string, Actividad> &grafo) //crea un pipe por cad aact
 
 void abrirpipes(map<string, Actividad> &grafo, map<string, int> &pipes_lectura)
 {
-    for (auto iterador6 = grafo.begin(); iterador6 != grafo.end(); iterador6++)
+    map<string, Actividad>::iterator iterador6;
+    for (iterador6 = grafo.begin(); iterador6 != grafo.end(); iterador6++)
     {
         string nombrepipe = "actividad_" + iterador6->first;
 
@@ -52,11 +54,13 @@ pid_t pid  = fork();
        // toma el id de la act dependiendte 
          string nombrepipe = "actividad_" + dependientes[idActividad][i];
 
-         int fd = open(nombrepipe.c_str(), O_WRONLY); // abre el pipe a usar , usando el nombre y usandolo solo para escribri 
+         int fd = open(nombrepipe.c_str(), O_WRONLY | O_NONBLOCK);
 
-         write(fd, idActividad.c_str(), idActividad.size()); // donde , que , cuanto 
-
+         if (fd >= 0)
+         {
+         write(fd, idActividad.c_str(), idActividad.size());
          close(fd);
+         }
          
          }
 
@@ -122,7 +126,7 @@ void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
       }
       else
       {
-         cout << "Actividad falló " << endl;
+         cout << "Actividad " << id << " falló" << endl;
          procesos_activos.erase(terminado);
       
          estados[id] = ABORTADA;
@@ -130,6 +134,16 @@ void esperaract (int &ejecutandose, map<pid_t, string> &procesos_activos,
       }
 
    }
+   else
+{
+    if (ctrlc == false)
+    {
+        cout << "Actividad " << id << " terminó por una señal" << endl;
+    }
+    procesos_activos.erase(terminado);
+    estados[id] = ABORTADA;
+    abortarDependientes(id, grafo, estados);
+}
 }
 
 void controlc(int)
@@ -189,13 +203,15 @@ int main( int argc, char* argv[]){
 
       if(ctrlc == true)
       {
-        for (auto iterador3 = procesos_activos.begin(); iterador3 != procesos_activos.end();iterador3++)
+        map<pid_t, string>::iterator iterador3;
+        for (iterador3 = procesos_activos.begin(); iterador3 != procesos_activos.end(); iterador3++)
         {
           kill(iterador3->first, SIGTERM );
           waitpid(iterador3->first, NULL, 0); // para que no hayan zombies
         }
 
-        for( auto iterador4 = pipes_lectura.begin(); iterador4 != pipes_lectura.end(); iterador4++)
+        map<string, int>::iterator iterador4;
+        for (iterador4 = pipes_lectura.begin(); iterador4 != pipes_lectura.end(); iterador4++)
         {
           close(iterador4->second);
         }
@@ -207,7 +223,7 @@ int main( int argc, char* argv[]){
 
         if (listas.size() > 0 && ejecutandose < k)
         {
-            string id = listas.back();
+            string id = listas.at(listas.size() - 1);
             listas.pop_back();
             estados[id] = EJECUTANDO;
 
@@ -220,7 +236,8 @@ int main( int argc, char* argv[]){
     }
 
 
-    for(auto iterador7 = grafo.begin(); iterador7 != grafo.end(); iterador7++)
+    map<string, Actividad>::iterator iterador7;
+    for(iterador7 = grafo.begin(); iterador7 != grafo.end(); iterador7++)
       {
          string nombrepipe = "actividad_" + iterador7->first;
 
